@@ -1,0 +1,145 @@
+{
+    "prompt": "Extract all data from this TAX INVOICE document image and return it as a valid JSON object that strictly conforms to the provided schema.",
+
+    "response_schema": {
+        "type": "object",
+        "properties": {
+
+            "letter_head": {
+                "type": "object",
+                "properties": {
+                    "company_name":              { "type": "string" },
+                    "address":                   { "type": "string" },
+                    "phone":                     { "type": "string" },
+                    "gstin":                     { "type": "string" },
+                    "pan":                       { "type": "string" },
+                    "state":                     { "type": "string" },
+                    "state_code":                { "type": "string" },
+                    "udyam_registration_number": { "type": "string" }
+                },
+                "required": [
+                    "company_name", "address", "phone", "gstin", "pan",
+                    "state", "state_code", "udyam_registration_number"
+                ]
+            },
+
+            "invoice_details": {
+                "type": "object",
+                "properties": {
+                    "invoice_no": { "type": "string" },
+                    "date":       { "type": "string" }
+                },
+                "required": ["invoice_no", "date"]
+            },
+
+            "receiver_details": {
+                "type": "object",
+                "properties": {
+                    "name":      { "type": "string" },
+                    "address":   { "type": "string" },
+                    "gstin":     { "type": "string" },
+                    "state":     { "type": "string" },
+                    "attention": { "type": "string" }
+                },
+                "required": ["name", "address", "gstin", "state", "attention"]
+            },
+
+            "consignee_details": {
+                "type": "object",
+                "properties": {
+                    "name":    { "type": "string" },
+                    "address": { "type": "string" },
+                    "gstin":   { "type": "string" },
+                    "state":   { "type": "string" }
+                },
+                "required": ["name", "address", "gstin", "state"]
+            },
+
+            "order_details": {
+                "type": "object",
+                "properties": {
+                    "job_no":        { "type": "string" },
+                    "order_no":      { "type": "string" },
+                    "dated":         { "type": "string" },
+                    "period":        { "type": "string" },
+                    "payment_terms": { "type": "string" }
+                },
+                "required": [
+                    "job_no", "order_no", "dated", "period", "payment_terms"
+                ]
+            },
+
+            "line_items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "serial_no":          { "type": "string" },
+                        "particulars":        { "type": "string" },
+                        "hsn":                { "type": "string" },
+                        "amount":             { "type": "string" },
+                        "discount_abatement": { "type": "string" },
+                        "taxable_value":      { "type": "string" }
+                    },
+                    "required": [
+                        "serial_no", "particulars", "hsn", "amount",
+                        "discount_abatement", "taxable_value"
+                    ]
+                }
+            },
+
+            "tax_breakup": {
+                "type": "object",
+                "properties": {
+                    "total_amount_before_tax":       { "type": "string" },
+                    "cgst":                          { "type": "string" },
+                    "sgst":                          { "type": "string" },
+                    "igst_rate":                     { "type": "string" },
+                    "igst_amount":                   { "type": "string" },
+                    "total_tax_amount_gst":          { "type": "string" },
+                    "total_amount_after_tax":        { "type": "string" },
+                    "gst_payable_on_reverse_charge": { "type": "string" }
+                },
+                "required": [
+                    "total_amount_before_tax", "cgst", "sgst",
+                    "igst_rate", "igst_amount", "total_tax_amount_gst",
+                    "total_amount_after_tax", "gst_payable_on_reverse_charge"
+                ]
+            },
+
+            "total_invoice_amount_in_words": { "type": "string" },
+
+            "payment_mode": { "type": "string" },
+
+            "certification_statement": { "type": "string" },
+
+            "authorised_signatory": {
+                "type": "object",
+                "properties": {
+                    "company_name":      { "type": "string" },
+                    "signatory_name":    { "type": "string" },
+                    "digital_signature": { "type": "string" }
+                },
+                "required": ["company_name", "signatory_name", "digital_signature"]
+            },
+
+            "registered_office_address": { "type": "string" }
+
+        },
+        "required": [
+            "letter_head",
+            "invoice_details",
+            "receiver_details",
+            "consignee_details",
+            "order_details",
+            "line_items",
+            "tax_breakup",
+            "total_invoice_amount_in_words",
+            "payment_mode",
+            "certification_statement",
+            "authorised_signatory",
+            "registered_office_address"
+        ]
+    }
+}
