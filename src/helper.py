@@ -18,7 +18,7 @@ import re
 # ---------------------------------------------------------------------------
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TEMP_DIR     = os.path.join(_PROJECT_ROOT, "temp")
+_TEMP_DIR     = os.getenv("TEMP_DIR") or os.path.join(_PROJECT_ROOT, "temp")
 
 # ---------------------------------------------------------------------------
 # Config
