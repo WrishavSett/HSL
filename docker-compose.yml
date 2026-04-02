@@ -1,0 +1,31 @@
+services:
+  hsl-api:
+    build:
+      context: .          # HSL/ — Dockerfile lives here
+      dockerfile: Dockerfile
+
+    image: hsl-invoice-api:latest
+
+    container_name: hsl-api
+
+    ports:
+      - "8000:8000"       # host:container
+
+    # Secrets are read from .env at runtime; they are NEVER baked into the image.
+    # .env must contain:
+    #   GEMINI_API_KEY=<your-key>
+    #   GEMINI_MODEL_NAME=gemini-2.5-flash-preview   (or whichever model)
+    env_file:
+      - .env
+
+    restart: unless-stopped
+
+    # Optional health-check — Docker will mark the container unhealthy if
+    # FastAPI stops responding, useful for orchestration / monitoring.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
