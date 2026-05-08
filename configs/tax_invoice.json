@@ -1,6 +1,13 @@
 {
     "prompt": "Extract all data from this TAX INVOICE document image and return it as a valid JSON object that strictly conforms to the provided schema.",
 
+    "fields_of_interest": {
+        "company_name":           "letter_head.company_name",
+        "invoice_no":             "invoice_details.invoice_no",
+        "order_no":               "order_details.order_no",
+        "total_amount_before_tax": "tax_breakup.total_amount_before_tax"
+    },
+
     "response_schema": {
         "type": "object",
         "properties": {

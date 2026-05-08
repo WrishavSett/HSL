@@ -5,8 +5,8 @@ helper.py — Shared utilities for the HSL Invoice Extraction pipeline.
 Provides:
   - Config loading and validation  (load_config)
   - PDF → image conversion         (pdf_to_image)
-  - Temp file cleanup              (_cleanup_temp_file)
-  - Recursive field search         (search_fields)
+  - Temp file cleanup              (cleanup_temp_file)
+  - Dot-path field resolution      (resolve_paths)
 """
 
 import json
@@ -24,24 +24,26 @@ _TEMP_DIR     = os.getenv("TEMP_DIR") or os.path.join(_PROJECT_ROOT, "temp")
 # Config
 # ---------------------------------------------------------------------------
 
-def load_config(config_path: str) -> tuple[str, dict]:
+def load_config(config_path: str) -> tuple[str, dict, dict[str, str]]:
     """
     Load and validate a document config .json file.
 
-    The file must be a JSON object with exactly two keys:
-        - ``"prompt"``          (str)  : extraction instructions for the model.
-        - ``"response_schema"`` (dict) : JSON schema that constrains model output.
+    The file must be a JSON object with exactly three top-level keys:
+
+        - ``"prompt"``             (str)          : extraction instructions for the model.
+        - ``"response_schema"``    (dict)         : JSON schema that constrains model output.
+        - ``"fields_of_interest"`` (dict[str,str]): aliased dot-path map of fields to return.
 
     Args:
         config_path (str): Absolute or relative path to the .json config file.
 
     Returns:
-        tuple[str, dict]: ``(prompt, response_schema)``
+        tuple[str, dict, dict[str, str]]: ``(prompt, response_schema, fields_of_interest)``
 
     Raises:
         FileNotFoundError : If *config_path* does not exist on disk.
         ValueError        : If the file is invalid JSON, is missing required
-                            keys, has wrong types, or contains empty values.
+                            keys, has wrong types, or contains empty/invalid values.
     """
     if not os.path.exists(config_path):
         raise FileNotFoundError(
@@ -58,11 +60,11 @@ def load_config(config_path: str) -> tuple[str, dict]:
             f"Parser error: {exc}"
         )
 
-    missing = [k for k in ("prompt", "response_schema") if k not in config]
+    missing = [k for k in ("prompt", "response_schema", "fields_of_interest") if k not in config]
     if missing:
         raise ValueError(
             f"Config file {config_path!r} is missing required key(s): {missing}\n"
-            'Expected: { "prompt": "...", "response_schema": { ... } }'
+            'Expected: { "prompt": "...", "response_schema": { ... }, "fields_of_interest": { ... } }'
         )
 
     if not isinstance(config["prompt"], str):
@@ -75,6 +77,11 @@ def load_config(config_path: str) -> tuple[str, dict]:
             f'"response_schema" in {config_path!r} must be an object/dict, '
             f'got {type(config["response_schema"]).__name__}.'
         )
+    if not isinstance(config["fields_of_interest"], dict):
+        raise ValueError(
+            f'"fields_of_interest" in {config_path!r} must be an object/dict, '
+            f'got {type(config["fields_of_interest"]).__name__}.'
+        )
     if not config["prompt"].strip():
         raise ValueError(
             f'"prompt" in {config_path!r} is empty. Provide a non-empty extraction prompt.'
@@ -84,8 +91,34 @@ def load_config(config_path: str) -> tuple[str, dict]:
             f'"response_schema" in {config_path!r} is an empty object. '
             "Provide a valid JSON schema."
         )
+    if not config["fields_of_interest"]:
+        raise ValueError(
+            f'"fields_of_interest" in {config_path!r} is an empty object. '
+            "Provide at least one alias → dot-path entry."
+        )
 
-    return config["prompt"], config["response_schema"]
+    # Validate that every entry is a non-empty string alias → non-empty string path,
+    # and that each path segment is a valid identifier (with optional array index).
+    _SEGMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$")
+    for alias, path in config["fields_of_interest"].items():
+        if not isinstance(alias, str) or not alias.strip():
+            raise ValueError(
+                f'"fields_of_interest" in {config_path!r} contains a non-string or empty alias.'
+            )
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError(
+                f'"fields_of_interest[{alias!r}]" in {config_path!r} must be a non-empty dot-path string.'
+            )
+        segments = path.split(".")
+        for seg in segments:
+            if not _SEGMENT.match(seg):
+                raise ValueError(
+                    f'"fields_of_interest[{alias!r}]" in {config_path!r} contains an invalid '
+                    f'path segment {seg!r}. '
+                    "Segments must be identifiers, optionally followed by an array index like [0]."
+                )
+
+    return config["prompt"], config["response_schema"], config["fields_of_interest"]
 
 # ---------------------------------------------------------------------------
 # PDF → image
@@ -185,48 +218,76 @@ def cleanup_temp_file(path: str) -> None:
         pass
 
 # ---------------------------------------------------------------------------
-# Field extraction
+# Dot-path field resolution
 # ---------------------------------------------------------------------------
 
-def search_fields(data: dict | list, fields: list[str]) -> dict[str, str | None]:
-    """
-    Recursively walk *data* and return the first value found for each name in
-    *fields*, regardless of nesting depth.
+# Matches a bare key ("letter_head") or a key with an array index ("line_items[2]").
+_PATH_SEGMENT = re.compile(r"^(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?:\[(?P<idx>\d+)\])?$")
 
-    If the same key appears more than once (e.g. ``"name"`` under both receiver
-    and consignee), the first occurrence in a depth-first traversal is returned.
-    Missing fields are returned as ``None``.
+
+def resolve_paths(
+    data: dict,
+    fields_of_interest: dict[str, str],
+) -> dict[str, object]:
+    """
+    Resolve a set of dot-path expressions against *data* and return a flat
+    mapping of alias → value.
+
+    Each path in *fields_of_interest* is a dot-separated sequence of dict keys
+    with optional array indices, e.g.::
+
+        "letter_head.company_name"       →  data["letter_head"]["company_name"]
+        "line_items[0].hsn"              →  data["line_items"][0]["hsn"]
+        "tax_breakup.total_amount_before_tax"
+
+    If any segment along a path is missing, out of range, or the wrong type,
+    the alias resolves to ``None`` rather than raising — this mirrors the
+    original behaviour for absent fields.
 
     Args:
-        data (dict | list): Parsed Gemini response (or any sub-tree).
-        fields (list[str]): Field names to search for.
+        data (dict):                     Parsed Gemini response.
+        fields_of_interest (dict[str,str]): Mapping of output alias → dot-path.
 
     Returns:
-        dict[str, str | None]: Mapping of field name → first matched value (or None).
+        dict[str, object]: Flat mapping of alias → resolved value (or ``None``).
 
     Example:
-        >>> search_fields(parsed, ["company_name", "invoice_no"])
+        >>> resolve_paths(parsed, {
+        ...     "company_name": "letter_head.company_name",
+        ...     "invoice_no":   "invoice_details.invoice_no",
+        ... })
         {"company_name": "DCG Data-Core Systems ...", "invoice_no": "DC/25-26/03/0020"}
     """
-    found: dict[str, str] = {}
+    result: dict[str, object] = {}
 
-    def _walk(node: dict | list) -> None:
-        if len(found) == len(fields):
-            return
-        if isinstance(node, dict):
-            for key, value in node.items():
-                if key in fields and key not in found:
-                    found[key] = value
-                if isinstance(value, (dict, list)):
-                    _walk(value)
-                if len(found) == len(fields):
-                    return
-        elif isinstance(node, list):
-            for item in node:
-                if isinstance(item, (dict, list)):
-                    _walk(item)
-                if len(found) == len(fields):
-                    return
+    for alias, path in fields_of_interest.items():
+        node: object = data
 
-    _walk(data)
-    return {field: found.get(field) for field in fields}
+        for segment in path.split("."):
+            match = _PATH_SEGMENT.match(segment)
+            if not match:
+                # Malformed segment — path validation in load_config should catch
+                # this at startup, but guard here defensively.
+                node = None
+                break
+
+            key = match.group("key")
+            idx = match.group("idx")
+
+            # Descend into the dict key.
+            if not isinstance(node, dict) or key not in node:
+                node = None
+                break
+            node = node[key]
+
+            # If an array index was specified, descend into the list.
+            if idx is not None:
+                i = int(idx)
+                if not isinstance(node, list) or i >= len(node):
+                    node = None
+                    break
+                node = node[i]
+
+        result[alias] = node
+
+    return result

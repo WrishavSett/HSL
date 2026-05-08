@@ -161,7 +161,7 @@ class GeminiClient:
             ...     "configs/tax_invoice.json",
             ... )
         """
-        prompt, response_schema = load_config(config_path)
+        prompt, response_schema, _ = load_config(config_path)
 
         temp_image: str = ""
         try:

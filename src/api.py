@@ -23,7 +23,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from gemini_client import GeminiClient
-from helper import cleanup_temp_file, search_fields, _TEMP_DIR
+from helper import cleanup_temp_file, load_config, resolve_paths, _TEMP_DIR
 
 # ---------------------------------------------------------------------------
 # App
@@ -46,14 +46,6 @@ _CONFIGS_DIR  = os.path.join(_PROJECT_ROOT, "configs")
 _SUPPORTED_TYPES: dict[str, str] = {
     "tax-invoice": "tax_invoice.json",
 }
-
-# Add or remove field names here without touching any other code.
-_FIELDS_OF_INTEREST: list[str] = [
-    "company_name",
-    "invoice_no",
-    "order_no",
-    "total_amount_before_tax",
-]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -210,5 +202,6 @@ async def extract(
         if temp_pdf:
             cleanup_temp_file(temp_pdf)
 
-    # 5. Return only the fields of interest
-    return JSONResponse(content=search_fields(result, _FIELDS_OF_INTEREST))
+    # 5. Load fields_of_interest from the config and resolve dot-paths against the result.
+    _, _, fields_of_interest = load_config(config_path)
+    return JSONResponse(content=resolve_paths(result, fields_of_interest))
