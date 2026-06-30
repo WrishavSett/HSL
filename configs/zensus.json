@@ -1,0 +1,144 @@
+{
+    "prompt": "Extract all data from this TAX INVOICE document image and return it as a valid JSON object that strictly conforms to the provided schema.",
+
+    "fields_of_interest": {
+        "company_name":           "letter_head.company_name",
+        "invoice_no":             "invoice_details.invoice_no",
+        "order_no":               "purchase_order_details.purchase_order_no",
+        "total_amount_before_tax": "tax_breakup.subtotal"
+    },
+
+    "response_schema": {
+        "type": "object",
+        "properties": {
+
+            "letter_head": {
+                "type": "object",
+                "properties": {
+                    "company_name": { "type": "string" },
+                    "address":      { "type": "string" },
+                    "gstin":        { "type": "string" },
+                    "mobile":       { "type": "string" },
+                    "email":        { "type": "string" }
+                },
+                "required": [
+                    "company_name", "address", "gstin", "mobile", "email"
+                ]
+            },
+
+            "invoice_details": {
+                "type": "object",
+                "properties": {
+                    "invoice_no":      { "type": "string" },
+                    "date":            { "type": "string" },
+                    "place_of_supply": { "type": "string" },
+                    "due_terms":       { "type": "string" }
+                },
+                "required": [
+                    "invoice_no", "date", "place_of_supply", "due_terms"
+                ]
+            },
+
+            "buyer_details": {
+                "type": "object",
+                "properties": {
+                    "name":    { "type": "string" },
+                    "address": { "type": "string" },
+                    "gstin":   { "type": "string" },
+                    "mobile":  { "type": "string" }
+                },
+                "required": ["name", "address", "gstin", "mobile"]
+            },
+
+            "purchase_order_details": {
+                "type": "object",
+                "properties": {
+                    "purchase_order_no":   { "type": "string" },
+                    "purchase_order_date": { "type": "string" }
+                },
+                "required": ["purchase_order_no", "purchase_order_date"]
+            },
+
+            "line_items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "serial_no":   { "type": "string" },
+                        "description": { "type": "string" },
+                        "hsn_sac":     { "type": "string" },
+                        "quantity":    { "type": "string" },
+                        "rate":        { "type": "string" },
+                        "value":       { "type": "string" },
+                        "tax_rate":    { "type": "string" },
+                        "tax":         { "type": "string" },
+                        "total":       { "type": "string" }
+                    },
+                    "required": [
+                        "serial_no", "description", "hsn_sac", "quantity",
+                        "rate", "value", "tax_rate", "tax", "total"
+                    ]
+                }
+            },
+
+            "bank_details": {
+                "type": "object",
+                "properties": {
+                    "bank_type":           { "type": "string" },
+                    "account_holder_name": { "type": "string" },
+                    "account_number":      { "type": "string" },
+                    "ifsc":                { "type": "string" }
+                },
+                "required": [
+                    "bank_type", "account_holder_name", "account_number", "ifsc"
+                ]
+            },
+
+            "tax_breakup": {
+                "type": "object",
+                "properties": {
+                    "subtotal":    { "type": "string" },
+                    "cgst_rate":   { "type": "string" },
+                    "cgst_amount": { "type": "string" },
+                    "sgst_rate":   { "type": "string" },
+                    "sgst_amount": { "type": "string" },
+                    "total":       { "type": "string" }
+                },
+                "required": [
+                    "subtotal", "cgst_rate", "cgst_amount",
+                    "sgst_rate", "sgst_amount", "total"
+                ]
+            },
+
+            "amount_in_words": { "type": "string" },
+
+            "note": { "type": "string" },
+
+            "authorised_signatory": {
+                "type": "object",
+                "properties": {
+                    "company_name":   { "type": "string" },
+                    "signatory_name": { "type": "string" }
+                },
+                "required": ["company_name", "signatory_name"]
+            },
+
+            "footer_attribution": { "type": "string" }
+
+        },
+        "required": [
+            "letter_head",
+            "invoice_details",
+            "buyer_details",
+            "purchase_order_details",
+            "line_items",
+            "bank_details",
+            "tax_breakup",
+            "amount_in_words",
+            "note",
+            "authorised_signatory",
+            "footer_attribution"
+        ]
+    }
+}
