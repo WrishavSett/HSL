@@ -45,6 +45,8 @@ _CONFIGS_DIR  = os.path.join(_PROJECT_ROOT, "configs")
 # To add a new document type: drop a .json into configs/ and add its entry here.
 _SUPPORTED_TYPES: dict[str, str] = {
     "tax-invoice": "tax_invoice.json",
+    "zensus": "zensus.json",
+    "system-solution": "system-solution.json",
 }
 
 # ---------------------------------------------------------------------------
