@@ -1,0 +1,27 @@
+# --- Python artefacts ---
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+
+# --- Virtual environment ---
+.venv/
+venv/
+env/
+
+# --- Secrets (never bake into image layers) ---
+.env
+
+# --- Scratch / test data (not needed at runtime) ---
+temp/
+test_data/
+
+# --- Version control ---
+.git/
+.gitignore
+
+# --- IDE / OS noise ---
+.vscode/
+.idea/
+**/.DS_Store
