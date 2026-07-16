@@ -182,8 +182,8 @@ async def extract(File: UploadFile = FastAPIFile(...)) -> JSONResponse:
         )
         log.warning(
             "Rejected upload — unsupported media type. "
-            "filename=%r content_type=%r code=%s",
-            File.filename, File.content_type, exc.code,
+            "filename=%r content_type=%r code=%s description=%r detail=%r",
+            File.filename, File.content_type, exc.code, exc.description, exc.detail
         )
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict())
 
@@ -193,7 +193,10 @@ async def extract(File: UploadFile = FastAPIFile(...)) -> JSONResponse:
         exc = EmptyUploadError(
             detail="Uploaded file is empty. Send a valid PDF file."
         )
-        log.warning("Rejected upload — empty file. filename=%r code=%s", File.filename, exc.code)
+        log.warning(
+            "Rejected upload — empty file. "
+            "filename=%r code=%s description=%r detail=%r",
+            File.filename, exc.code, exc.description, exc.detail)
         raise HTTPException(status_code=exc.http_status, detail=exc.to_dict())
 
     # 3. Save, extract, clean up
