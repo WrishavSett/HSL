@@ -85,8 +85,8 @@ class GeminiClient:
 
         try:
             self.client = genai.Client(api_key=self.api_key)
-        except Exception:
-            raise RuntimeError("Secrets file not found or not configured properly.")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to initialise Gemini client: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Core LLM call

@@ -167,11 +167,17 @@ async def extract(File: UploadFile = FastAPIFile(...)) -> JSONResponse:
         )
 
     # 2. Read uploaded file
-    pdf_bytes = await File.read()
+    _MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
+    pdf_bytes = await File.read(_MAX_UPLOAD_SIZE + 1)
     if not pdf_bytes:
         raise HTTPException(
             status_code=400,
             detail="Uploaded file is empty. Send a valid PDF file."
+        )
+    if len(pdf_bytes) > _MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded file exceeds maximum size of {_MAX_UPLOAD_SIZE} bytes."
         )
 
     # 3. Save upload → run extraction → always clean up temp file
