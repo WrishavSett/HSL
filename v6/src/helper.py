@@ -40,28 +40,6 @@ _PATH_SEGMENT = re.compile(r"^(?P<key>[A-Za-z_][A-Za-z0-9_]*)(?:\[(?P<idx>\d+)\]
 # ---------------------------------------------------------------------------
 
 def load_config(config_path: str) -> tuple[str, str, dict, dict[str, str]]:
-    """
-    Load and validate the extraction config .json file.
-
-    The file must be a JSON object with exactly four top-level keys:
-
-        - "system_instruction" (str)          : persona + field-extraction rules for the model.
-        - "prompt"             (str)          : per-call trigger instruction for the model.
-        - "response_schema"    (dict)         : JSON schema that constrains model output.
-        - "fields_of_interest" (dict[str,str]): aliased dot-path map of fields to return.
-
-    Args:
-        config_path (str): Absolute or relative path to the .json config file.
-
-    Returns:
-        tuple[str, str, dict, dict[str, str]]:
-            (prompt, system_instruction, response_schema, fields_of_interest)
-
-    Raises:
-        FileNotFoundError : If *config_path* does not exist on disk.
-        ValueError        : If the file is invalid JSON, is missing required
-                            keys, has wrong types, or contains empty/invalid values.
-    """
     if not os.path.exists(config_path):
         raise FileNotFoundError(
             f"Config file not found: {config_path!r}\n"
@@ -165,39 +143,6 @@ def pdf_to_images(
     fmt: str = "jpeg",
     max_pages: int = 30,
 ) -> list[str]:
-    """
-    Rasterise all pages of a PDF into image files stored in *temp_dir*.
-
-    Uses pdf2image (which wraps Poppler's pdftoppm).
-    Install dependencies with::
-
-        pip install pdf2image
-        # Ubuntu/Debian : sudo apt-get install poppler-utils
-        # macOS         : brew install poppler
-        # Windows       : download poppler and add its bin/ to PATH
-
-    Args:
-        pdf_path (str):   Absolute or relative path to the source PDF file.
-        temp_dir (str):   Directory to write the converted images into.
-                          Created automatically if it does not exist.
-                          Defaults to HSL/temp/.
-        dpi (int):        Rendering resolution in dots per inch (default 200).
-                          Higher values improve OCR accuracy at the cost of
-                          larger files and slower processing.
-        fmt (str):        Output image format — "jpeg" (default) or "png".
-        max_pages (int):  Maximum number of pages permitted. Raises ValueError
-                          if the PDF exceeds this limit (default 30).
-
-    Returns:
-        list[str]: Absolute paths to the generated image files, one per page,
-                   in page order (e.g. [".../temp/invoice_p1.jpg", ".../temp/invoice_p2.jpg"]).
-
-    Raises:
-        ImportError       : If pdf2image is not installed.
-        FileNotFoundError : If *pdf_path* does not exist.
-        ValueError        : If the PDF has more pages than *max_pages*.
-        RuntimeError      : If Poppler is absent from PATH or conversion fails.
-    """
     try:
         from pdf2image import convert_from_path
         from pdf2image.exceptions import PDFInfoNotInstalledError, PDFPageCountError
@@ -212,6 +157,8 @@ def pdf_to_images(
         )
 
     if not os.path.exists(pdf_path):
+        log.error(f"PDF file not found: {pdf_path!r}.\n"
+                  "Ensure the path is correct and the file exists.")
         raise FileNotFoundError(
             f"PDF file not found: {pdf_path!r}\n"
             "Ensure the path is correct and the file exists."
@@ -222,17 +169,31 @@ def pdf_to_images(
 
     try:
         pages = convert_from_path(pdf_path, dpi=dpi, fmt=fmt)
+        log.debug(
+            f"Converted PDF {pdf_path!r} to {len(pages)} image(s) "
+            f"at {dpi} DPI in {fmt.upper()} format."
+        )
     except PDFInfoNotInstalledError:
+        log.error(
+            f"Poppler's pdfinfo utility was not found.\n"
+            "Install Poppler and make sure its executables are on your PATH."
+        )
         raise RuntimeError(
             f"Poppler's pdfinfo utility was not found.\n"
             "Install Poppler and make sure its executables are on your PATH."
         )
     except PDFPageCountError as exc:
+        log.error(f"Could not read page count from {pdf_path!r}: {exc}")
         raise RuntimeError(f"Could not read page count from {pdf_path!r}: {exc}")
     except Exception as exc:
+        log.error(f"PDF conversion failed for {pdf_path!r}: {exc}")
         raise RuntimeError(f"PDF conversion failed for {pdf_path!r}: {exc}")
 
     if len(pages) > max_pages:
+        log.critical(
+            f"PDF has {len(pages)} pages, which exceeds the limit of {max_pages}.\n"
+            "Split the document or raise max_pages."
+        )
         raise ValueError(
             f"PDF has {len(pages)} pages, which exceeds the limit of {max_pages}.\n"
             "Split the document or raise max_pages."
@@ -252,24 +213,13 @@ def pdf_to_images(
 # ---------------------------------------------------------------------------
 
 def cleanup_temp_file(path: str) -> None:
-    """
-    Delete a temporary file, silently ignoring missing-file errors.
-
-    Args:
-        path (str): File path to remove.
-    """
     try:
         os.remove(path)
+        log.debug(f"Cleaned up temporary file: {path}")
     except FileNotFoundError:
         pass
 
 def cleanup_temp_files(paths: list[str]) -> None:
-    """
-    Delete a list of temporary files, silently ignoring missing-file errors.
-
-    Args:
-        paths (list[str]): File paths to remove.
-    """
     for path in paths:
         cleanup_temp_file(path)
 
@@ -278,26 +228,6 @@ def cleanup_temp_files(paths: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 def normalize_subtotal(value: str) -> str:
-    """
-    Extract a plain numeric string from a subtotal value returned by Gemini.
-
-    Algorithm:
-      1. Find the first and last digit in the string and discard everything
-         outside that span (e.g. leading "Rs. " and trailing "/-").
-      2. From the remaining span, keep only digits and at most one decimal
-         point; discard everything else (currency symbols, commas, spaces).
-      3. If no digit exists anywhere in the string, return the value unchanged.
-      4. If more than one decimal point is found after cleaning, return the
-         original value unchanged.
-
-    Args:
-        value (str): Raw subtotal string from the Gemini response.
-
-    Returns:
-        str: Plain numeric string (e.g. "491716.95" or "100000"),
-             or the original *value* if no digit could be found or if more
-             than one decimal point is present after cleaning.
-    """
     first = re.search(r'\d', value)
     if not first:
         return value
@@ -307,6 +237,10 @@ def normalize_subtotal(value: str) -> str:
 
     result = re.sub(r'[^\d.]', '', span)
     if result.count('.') > 1:
+        log.debug(
+            f"normalize_subtotal: multiple decimal points found in {result!r},\n"
+            f"returning original value {value!r}"
+        )
         return value
 
     return result
@@ -319,35 +253,6 @@ def resolve_paths(
     data: dict,
     fields_of_interest: dict[str, str],
 ) -> dict[str, object]:
-    """
-    Resolve a set of dot-path expressions against *data* and return a flat
-    mapping of alias to value.
-
-    Each path in *fields_of_interest* is a dot-separated sequence of dict keys
-    with optional array indices, e.g.::
-
-        "letter_head.company_name"       to  data["letter_head"]["company_name"]
-        "line_items[0].hsn"              to  data["line_items"][0]["hsn"]
-        "tax_breakup.total_amount_before_tax"
-
-    If any segment along a path is missing, out of range, or the wrong type,
-    the alias resolves to None rather than raising — this mirrors the
-    original behaviour for absent fields.
-
-    Args:
-        data (dict):                     Parsed Gemini response.
-        fields_of_interest (dict[str,str]): Mapping of output alias to dot-path.
-
-    Returns:
-        dict[str, object]: Flat mapping of alias to resolved value (or None).
-
-    Example:
-        >>> resolve_paths(parsed, {
-        ...     "company_name": "letter_head.company_name",
-        ...     "invoice_no":   "invoice_details.invoice_no",
-        ... })
-        {"company_name": "DCG Data-Core Systems ...", "invoice_no": "DC/25-26/03/0020"}
-    """
     result: dict[str, object] = {}
 
     for alias, path in fields_of_interest.items():
