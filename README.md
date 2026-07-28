@@ -30,13 +30,13 @@ HSL provides a single HTTP endpoint — `POST /extract` — that:
 
 **Tech stack**
 
-| Layer | Technology |
-|---|---|
-| Web framework | FastAPI + Uvicorn |
-| LLM / vision | Google Gemini (`google-genai`) |
-| PDF rasterisation | pdf2image + Poppler |
-| Config format | Plain JSON (prompt + system instruction + JSON Schema) |
-| Containerisation | Docker + Docker Compose |
+| Layer             | Technology                    |
+|-------------------|-------------------------------|
+| Web framework     | FastAPI + Uvicorn             |
+| LLM / vision      | Google Gemini (`google-genai`)|
+| PDF rasterisation | pdf2image + Poppler           |
+| Config format     | Plain JSON                    |
+| Containerisation  | Docker + Docker Compose       |
 
 ---
 
@@ -57,7 +57,7 @@ api.py  ──►  Validates the uploaded file
                 │                              schema, and fields of interest
                 ├─ helper.pdf_to_images()      Rasterises all pages → JPEGs
                 ├─ GeminiClient.call_llm()     Sends images + prompt to Gemini
-                └─ helper.cleanup_temp_files() Deletes temp JPEGs
+                ├─ helper.cleanup_temp_files() Deletes temp JPEGs
                 │
                 └─ Returns response.parsed (full dict)
         ──►  helper.resolve_paths()   Resolves dot-path fields of interest
@@ -88,12 +88,9 @@ HSL/
 │   ├── __init__.py
 │   ├── api.py              # FastAPI app and /extract endpoint
 │   ├── gemini_client.py    # GeminiClient — LLM calls and PDF extraction
-│   └── helper.py           # Shared utilities (config, PDF→image, cleanup, resolve)
-│
-├── temp/                   # Transient scratch space for PDF and image files
-│                           # (auto-created at runtime; contents are not committed)
-└── test_data/
-    └── tax_invoice.pdf     # Sample invoice for manual testing
+│   ├── helper.py           # Shared utilities (config, PDF to image, cleanup, resolve)
+│   └── logger.py           # Centralised logger file
+└── temp/                   # Transient scratch space for PDF and image files
 ```
 
 ---
@@ -102,7 +99,11 @@ HSL/
 
 ### `src/api.py`
 
-The FastAPI application. Exposes one route:
+The FastAPI application. Exposes two routes:
+
+**`GET /`**
+
+- Health check
 
 **`POST /extract`**
 
@@ -120,14 +121,16 @@ Contains `GeminiClient`, the sole interface to the Gemini API.
 
 **`__init__(api_key, model_name)`** — Reads credentials from environment variables (`GEMINI_API_KEY`, `GEMINI_MODEL_NAME`) and initialises a `genai.Client`.
 
+**`_auth(self)`** — Validates the API key and confirms the requested model is available.
+
 **`call_llm(prompt, system_instruction, image_paths, response_schema)`** — Reads each page image from disk, assembles them into a single `contents` list, appends the prompt, and sends the request to Gemini. Key generation settings:
 
-| Setting | Value | Reason |
-|---|---|---|
-| `temperature` | `0.1` | Near-deterministic output for structured extraction |
-| `response_mime_type` | `application/json` | Forces JSON output |
-| `response_schema` | from config | Constrains field names and types |
-| `thinking_budget` | `0` | Disables chain-of-thought to reduce latency and cost |
+| Setting               | Value              | Reason                                               |
+|-----------------------|--------------------|------------------------------------------------------|
+| `temperature`         | `0.1`              | Near-deterministic output for structured extraction  |
+| `response_mime_type`  | `application/json` | Forces JSON output                                   |
+| `response_schema`     | from config        | Constrains field names and types                     |
+| `thinking_budget`     | `0`                | Disables chain-of-thought to reduce latency and cost |
 
 **`extract_invoice_data(pdf_path, config_path)`** — Orchestrates the full extraction pipeline: loads config → rasterises all PDF pages → calls `call_llm` → deletes temp images → validates and returns `response.parsed`.
 
@@ -143,6 +146,8 @@ Shared utilities used by both `api.py` and `gemini_client.py`.
 
 **`cleanup_temp_file(path)` / `cleanup_temp_files(paths)`** — Deletes one or more files, silently ignoring missing-file errors.
 
+**`normalize_subtotal(subtotal)`** — Strips non-numeric characters from a raw subtotal string.
+
 **`resolve_paths(data, fields_of_interest)`** — Walks a set of dot-path expressions against the parsed Gemini response dict and returns a flat alias → value mapping. Missing or unresolvable paths return `null` rather than raising an error.
 
 ---
@@ -151,12 +156,12 @@ Shared utilities used by both `api.py` and `gemini_client.py`.
 
 Defines how Gemini processes documents. Contains four top-level keys:
 
-| Key | Type | Purpose |
-|---|---|---|
-| `system_instruction` | string | Persona and extraction rules given to Gemini as context |
-| `prompt` | string | Per-call instruction sent alongside the document image(s) |
-| `response_schema` | object | JSON Schema constraining Gemini's output structure and field types |
-| `fields_of_interest` | object | Alias → dot-path map of fields to extract from the full response |
+| Key                  | Type   | Purpose                                                            |
+|----------------------|--------|--------------------------------------------------------------------|
+| `system_instruction` | string | Persona and extraction rules given to Gemini as context            |
+| `prompt`             | string | Per-call instruction sent alongside the document image(s)          |
+| `response_schema`    | object | JSON Schema constraining Gemini's output structure and field types |
+| `fields_of_interest` | object | Alias → dot-path map of fields to extract from the full response   |
 
 **Dot-path syntax**
 
@@ -201,7 +206,7 @@ cd HSL
 
 ```
 GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_MODEL_NAME=gemini-2.5-flash-preview
+GEMINI_MODEL_NAME=gemini-3.1-flash-lite
 ```
 
 > `.env` is listed in `.gitignore` and must never be committed to version control.
@@ -319,11 +324,11 @@ Fields absent or unreadable in the document are returned as `null`.
 
 ### Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `415 Unsupported Media Type` | File type not recognised | Ensure the file has a `.pdf` extension and the field type is set to **File** in form-data |
-| `400 Bad Request` | Uploaded file is empty | Confirm the file is a valid, non-empty PDF |
-| `500 Internal Server Error` | Server-side error (Gemini, Poppler, config) | Check the server logs for the full error message |
+| Symptom                      | Likely cause                                | Fix                                                                                       |
+|------------------------------|---------------------------------------------|-------------------------------------------------------------------------------------------|
+| `415 Unsupported Media Type` | File type not recognised                    | Ensure the file has a `.pdf` extension and the field type is set to **File** in form-data |
+| `400 Bad Request`            | Uploaded file is empty                      | Confirm the file is a valid, non-empty PDF                                                |
+| `500 Internal Server Error`  | Server-side error (Gemini, Poppler, config) | Check the server logs for the full error message                                          |
 
 ---
 
@@ -335,31 +340,34 @@ Extraction behaviour is controlled entirely by JSON config files in `configs/`. 
 
 ```json
 {
-  "system_instruction": "You are an expert document parser...",
-  "prompt": "Extract all fields from this document and return valid JSON.",
+  "system_instruction": "You are an expert financial-document parser.\n...",
+  "prompt": "The following images are the pages of a single document, presented...",
   "response_schema": {
     "type": "object",
     "properties": {
-      "company_name": { "type": "string" },
-      "invoice_no":   { "type": "string" }
+      "company_name": { "type": "string", "description": "" },
+      "invoice_no":   { "type": "string", "description": "" },
+      "po_no":        { "type": "string", "description": "" },
+      "subtotal":     { "type": "string", "description": "" }
     },
-    "required": ["company_name", "invoice_no"]
+    "required": ["company_name", "invoice_no", "po_no", "subtotal"],
+        "propertyOrdering": ["company_name", "invoice_no", "po_no", "subtotal"]
   },
   "fields_of_interest": {
-    "company_name": "letter_head.company_name",
-    "invoice_no":   "invoice_details.invoice_no",
-    "po_no":        "invoice_details.po_no",
-    "subtotal":     "tax_breakup.total_amount_before_tax"
+    "company_name": "company_name",
+    "invoice_no":   "invoice_no",
+    "po_no":        "po_no",
+    "subtotal":     "subtotal"
   }
 }
 ```
 
-| Key | Purpose |
-|---|---|
-| `system_instruction` | Sets Gemini's persona and global extraction rules |
-| `prompt` | Per-request instruction accompanying the document |
-| `response_schema` | JSON Schema that constrains Gemini's output; guarantees structure |
-| `fields_of_interest` | Maps response alias names to dot-paths in Gemini's full output |
+| Key                  | Purpose                                                           |
+|----------------------|-------------------------------------------------------------------|
+| `system_instruction` | Sets Gemini's persona and global extraction rules                 |
+| `prompt`             | Per-request instruction accompanying the document                 |
+| `response_schema`    | JSON Schema that constrains Gemini's output; guarantees structure |
+| `fields_of_interest` | Maps response alias names to dot-paths in Gemini's full output    |
 
 Modifying the config file is the only change needed to alter what fields are extracted or how Gemini is instructed to behave.
 
@@ -375,9 +383,9 @@ Accepts a PDF upload and returns structured JSON.
 
 The endpoint accepts `multipart/form-data` with a single file field:
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `File` | file | Yes | The PDF to extract data from. Validated by content type (`application/pdf`, `application/octet-stream`) and/or `.pdf` filename extension. |
+| Field  | Type | Required | Description                                                                                                                               |
+|--------|------|----------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| `File` | file | Yes      | The PDF to extract data from. Validated by content type (`application/pdf`, `application/octet-stream`) and/or `.pdf` filename extension. |
 
 **Response — `200 OK`**
 
@@ -394,11 +402,11 @@ A flat JSON object with one key per entry in `fields_of_interest`. Field values 
 
 **Error responses**
 
-| Status | Reason |
-|---|---|
-| `400` | Uploaded file is empty |
-| `415` | File is not a PDF (wrong content type and no `.pdf` extension) |
-| `500` | Config missing on disk, Gemini API error, Poppler error, or no structured output returned |
+| Status | Reason                                                                                    |
+|--------|-------------------------------------------------------------------------------------------|
+| `400`  | Uploaded file is empty                                                                    |
+| `415`  | File is not a PDF (wrong content type and no `.pdf` extension)                            |
+| `500`  | Config missing on disk, Gemini API error, Poppler error, or no structured output returned |
 
 **Interactive docs**
 
@@ -408,10 +416,10 @@ Swagger UI is available at `http://localhost:8000/docs` when the server is runni
 
 ## 10. Environment Variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | Yes | API key for authenticating with the Google Gemini API |
-| `GEMINI_MODEL_NAME` | Yes | Gemini model identifier, e.g. `gemini-2.5-flash-preview` |
-| `TEMP_DIR` | No | Directory for transient PDF and image files. Defaults to `HSL/temp/` locally; set to `/app/temp/` in the Docker image |
+| Variable            | Required | Description                                                                                                           |
+|---------------------|----------|-----------------------------------------------------------------------------------------------------------------------|
+| `GEMINI_API_KEY`    | Yes      | API key for authenticating with the Google Gemini API                                                                 |
+| `GEMINI_MODEL_NAME` | Yes      | Gemini model identifier, e.g. `gemini-2.5-flash-preview`                                                              |
+| `TEMP_DIR`          | No       | Directory for transient PDF and image files. Defaults to `HSL/temp/` locally; set to `/app/temp/` in the Docker image |
 
 All variables are read from the `.env` file in the project root via `python-dotenv`. In Docker they are injected through the `env_file` directive in `docker-compose.yml`.
