@@ -53,7 +53,7 @@ log = get_logger(__name__)
 # Paths
 # ---------------------------------------------------------------------------
 
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _TEMP_DIR     = os.path.join(_PROJECT_ROOT, "temp")
 
 # ---------------------------------------------------------------------------

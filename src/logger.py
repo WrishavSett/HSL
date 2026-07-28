@@ -40,7 +40,7 @@ import os
 # ---------------------------------------------------------------------------
 
 _LOGGER_NAME  = "hsl"
-_ROOT_DIR     = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _LOG_DIR      = os.path.join(_ROOT_DIR, "logs")
 _LOG_FILE     = os.path.join(_LOG_DIR, "hsl.log")
 _LOG_LEVEL    = "DEBUG"
