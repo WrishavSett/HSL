@@ -65,7 +65,7 @@ log = get_logger(__name__)
 # Single, format-agnostic extraction config. The system_instruction, prompt,
 # and response_schema live here rather than per-document-type files, since
 # the pipeline now extracts the same four fields regardless of document type.
-_PROJECT_ROOT        = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_PROJECT_ROOT        = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "configs", "extraction.json")
 
 # ---------------------------------------------------------------------------

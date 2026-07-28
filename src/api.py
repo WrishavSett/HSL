@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="HSL Invoice Extraction API",
     description="Accepts a raw PDF body and returns structured JSON extracted by Gemini.",
-    version="6.0.0",
+    version="1.0.0",
     lifespan=lifespan
 )
 
