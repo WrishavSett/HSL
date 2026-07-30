@@ -116,7 +116,7 @@ async def health_check() -> JSONResponse:
 @app.post(
     "/extract",
     summary="Extract structured data from a PDF invoice",
-    response_description="Structured JSON: company_name, invoice_no, po_no, subtotal",
+    response_description="Structured JSON: company_name, invoice_no, po_no, gst_no, subtotal",
 )
 async def extract(File: UploadFile = FastAPIFile(...)) -> JSONResponse:
     # 1. Validate Content-Type / filename extension
